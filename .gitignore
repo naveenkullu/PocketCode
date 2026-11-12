@@ -1,0 +1,78 @@
+# Dependencies and generated output
+node_modules/
+node_modules.backup-*/
+dist/
+coverage/
+.vite/
+.cache/
+*.tsbuildinfo
+
+# Local data
+data/
+workspace/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+
+# Environment files and credentials
+.env*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Agent runtime recovery artifacts
+agent-runtime-backup.ts
+agent-runtime.damaged.ts
+agent-runtime.recovery-candidate.ts
+agent-runtime.recovery.original.ts
+src/agents/agent-runtime.recovery.ts
+src/agents/agent-runtime.ts.corrupted
+
+# Temporary recovery and test artifacts
+.freebuff/
+.recovery-validation/
+vitest.recovery.config.ts
+tests/recovery-candidate-probe.test.ts
+test-tmp-*/
+add_helpers.py
+fix.py
+fix1.py
+fix2.py
+fix3.py
+fix4.py
+fix5.py
+fix9.py
+fix_chunk_done.py
+fix_chunk_done2.py
+fix_chunk_done3.py
+fix_final.py
+fix_step1.py
+fix_step2.py
+fix_step3.py
+fix_step4.py
+fix_stream1.py
+fix_stream2.py
+check-config.ts
+check-session.ts
+npm-error.log
+npm-install.log
+test-output.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+pocketcode-emergency-backup/

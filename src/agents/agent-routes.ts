@@ -1,0 +1,22 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+import type Database from "better-sqlite3";
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { ServerConfig } from "../server/index.js";
+import { validateSession } from "../auth/session-service.js";
+import { AgentError, AgentRuntime } from "./agent-runtime.js";
+import type { WorkspaceService } from "../workspaces/workspace-service.js";
+
+interface Dependencies { database:Database.Database;config:ServerConfig;workspace:WorkspaceService;encryptionKey?:string }
+function cookie(header:string|undefined){for(const p of header?.split(";")??[]){const i=p.indexOf("=");if(i>0&&p.slice(0,i).trim()==="pocketcode_session")return p.slice(i+1).trim();}return undefined;}
+function csrf(request:FastifyRequest,sessionId:string,key:string,config:ServerConfig){const supplied=request.headers["x-csrf-token"];const expected=createHmac("sha256",Buffer.from(key,"hex")).update(`pocketcode-csrf:${sessionId}`).digest("base64url");return request.headers.origin===new URL(config.frontendUrl??config.publicBaseUrl).origin&&typeof supplied==="string"&&supplied.length===expected.length&&timingSafeEqual(Buffer.from(supplied),Buffer.from(expected));}
+function auth(req:FastifyRequest,db:Database.Database){return validateSession(db,cookie(req.headers.cookie));}
+export function registerAgentRoutes(app:FastifyInstance,deps:Dependencies){
+  const runtime=new AgentRuntime(deps.database,deps.workspace,deps.encryptionKey??"");
+  app.addHook("onClose",async()=>runtime.close());
+  app.post("/api/agent/sessions",async(req,reply)=>{const s=auth(req,deps.database);if(!s)return reply.status(401).send({error:"unauthorized"});if(!deps.encryptionKey||!/^[\da-fA-F]{64}$/.test(deps.encryptionKey)||!csrf(req,s.id,deps.encryptionKey,deps.config))return reply.status(403).send({error:"forbidden"});try{const body=req.body as any;if(!body||typeof body.workspaceId!=="string")return reply.status(400).send({error:"invalid_request"});return reply.header("Cache-Control","no-store").status(201).send(runtime.create(s.userId,body.workspaceId));}catch(e){return reply.status(e instanceof AgentError?e.statusCode:404).send({error:e instanceof AgentError?e.code:"workspace_not_found"});}});
+  app.get("/api/agent/sessions",async(req,reply)=>{const s=auth(req,deps.database);return s?reply.header("Cache-Control","no-store").send({sessions:runtime.list(s.userId)}):reply.status(401).send({error:"unauthorized"});});
+  app.get("/api/agent/sessions/:sessionId",async(req,reply)=>{const s=auth(req,deps.database);if(!s)return reply.status(401).send({error:"unauthorized"});try{return reply.header("Cache-Control","no-store").send(runtime.get((req.params as any).sessionId,s.userId));}catch(e){return reply.status(e instanceof AgentError?e.statusCode:404).send({error:e instanceof AgentError?e.code:"session_not_found"});}});
+  app.post("/api/agent/sessions/:sessionId/messages",async(req,reply)=>{const s=auth(req,deps.database);if(!s)return reply.status(401).send({error:"unauthorized"});if(!deps.encryptionKey||!/^[\da-fA-F]{64}$/.test(deps.encryptionKey)||!csrf(req,s.id,deps.encryptionKey,deps.config))return reply.status(403).send({error:"forbidden"});try{return reply.header("Cache-Control","no-store").send(await runtime.message((req.params as any).sessionId,s.userId,(req.body as any)?.message));}catch(e){return reply.status(e instanceof AgentError?e.statusCode:502).send({error:e instanceof AgentError?e.code:"provider_error"});}});
+  app.post("/api/agent/sessions/:sessionId/cancel",async(req,reply)=>{const s=auth(req,deps.database);if(!s)return reply.status(401).send({error:"unauthorized"});if(!deps.encryptionKey||!/^[\da-fA-F]{64}$/.test(deps.encryptionKey)||!csrf(req,s.id,deps.encryptionKey,deps.config))return reply.status(403).send({error:"forbidden"});try{runtime.cancel((req.params as any).sessionId,s.userId);return reply.status(204).send();}catch(e){return reply.status(e instanceof AgentError?e.statusCode:404).send({error:e instanceof AgentError?e.code:"session_not_found"});}});
+  app.get("/api/agent/sessions/:sessionId/events",async(req,reply)=>{const s=auth(req,deps.database);if(!s)return reply.status(401).send({error:"unauthorized"});try{return reply.header("Cache-Control","no-store").send({events:runtime.events((req.params as any).sessionId,s.userId)});}catch(e){return reply.status(e instanceof AgentError?e.statusCode:404).send({error:e instanceof AgentError?e.code:"session_not_found"});}});
+}
