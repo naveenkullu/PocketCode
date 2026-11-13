@@ -78,6 +78,28 @@ const validGitHubConfig: GitHubAppConfig = {
 };
 
 describe("GitHub App configuration", () => {
+  it("defaults the host to the loopback address in development", () => {
+    assert.equal(loadServerConfig({ NODE_ENV: "development" }).host, "127.0.0.1");
+  });
+
+  it("defaults the host to all interfaces in production", () => {
+    assert.equal(
+      loadServerConfig({ NODE_ENV: "production", FRONTEND_URL: "https://example.com" }).host,
+      "0.0.0.0",
+    );
+  });
+
+  it("uses an explicitly configured host in production", () => {
+    assert.equal(
+      loadServerConfig({
+        NODE_ENV: "production",
+        HOST: "127.0.0.1",
+        FRONTEND_URL: "https://example.com",
+      }).host,
+      "127.0.0.1",
+    );
+  });
+
   it("reports missing required variable names without exposing secret values", () => {
     const secret = "must-never-appear-in-errors";
     const config: ServerConfig = {

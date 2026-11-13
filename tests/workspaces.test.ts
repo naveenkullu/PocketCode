@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHmac, generateKeyPairSync } from "node:crypto";
@@ -13,12 +13,32 @@ const KEY="0123456789abcdef".repeat(4);
 const privateKey=generateKeyPairSync("rsa",{modulusLength:2048}).privateKey.export({type:"pkcs8",format:"pem"}).toString();
 const githubApp:GitHubAppConfig={clientId:"Iv1.test",clientSecret:"client-secret",slug:"test",appId:"12345",privateKey,callbackUrl:"http://localhost/auth",tokenEncryptionKey:KEY};
 const config={port:3000,host:"127.0.0.1",publicBaseUrl:"http://localhost:3000",githubApp};
+
+describe("workspace root configuration",()=>{
+ it("uses WORKSPACE_ROOT when configured",()=>{
+  const temp=mkdtempSync(path.join(os.tmpdir(),"pocketcode-workspace-env-"));const root=path.join(temp,"configured");const previous=process.env.WORKSPACE_ROOT;process.env.WORKSPACE_ROOT=root;const db=openDatabase(":memory:");
+  try{new WorkspaceService(db);assert.equal(existsSync(root),true);}
+  finally{db.close();if(previous===undefined)delete process.env.WORKSPACE_ROOT;else process.env.WORKSPACE_ROOT=previous;rmSync(temp,{recursive:true,force:true});}
+ });
+ it("preserves the os.tmpdir default when WORKSPACE_ROOT is absent",()=>{
+  const temp=mkdtempSync(path.join(os.tmpdir(),"pocketcode-workspace-default-"));const previous=process.env.WORKSPACE_ROOT;const previousTmpdir=process.env.TMPDIR;const previousTmp=process.env.TMP;const previousTemp=process.env.TEMP;
+  process.env.TMPDIR=temp;process.env.TMP=temp;process.env.TEMP=temp;delete process.env.WORKSPACE_ROOT;const db=openDatabase(":memory:");
+  try{new WorkspaceService(db);const expected=path.join(temp,"pocketcode-workspaces");assert.equal(existsSync(expected),true);}
+  finally{db.close();if(previous===undefined)delete process.env.WORKSPACE_ROOT;else process.env.WORKSPACE_ROOT=previous;for(const [key,value] of [["TMPDIR",previousTmpdir],["TMP",previousTmp],["TEMP",previousTemp]] as const){if(value===undefined)delete process.env[key];else process.env[key]=value;}rmSync(temp,{recursive:true,force:true});}
+ });
+ it("uses an explicit constructor root instead of WORKSPACE_ROOT",()=>{
+  const temp=mkdtempSync(path.join(os.tmpdir(),"pocketcode-workspace-override-"));const configured=path.join(temp,"configured");const explicit=path.join(temp,"explicit");const previous=process.env.WORKSPACE_ROOT;process.env.WORKSPACE_ROOT=configured;const db=openDatabase(":memory:");
+  try{new WorkspaceService(db,{rootDirectory:explicit});assert.equal(existsSync(explicit),true);assert.equal(existsSync(configured),false);}
+  finally{db.close();if(previous===undefined)delete process.env.WORKSPACE_ROOT;else process.env.WORKSPACE_ROOT=previous;rmSync(temp,{recursive:true,force:true});}
+ });
+});
+
 function fixture(fetchImpl:typeof fetch=async()=>{throw Error("unexpected request")}){
  const temp=mkdtempSync(path.join(os.tmpdir(),"pocketcode-ws-test-"));const root=path.join(temp,"workspaces");const db=openDatabase(":memory:");
  for(const [id,githubId,name] of [["u1","11","alice"],["u2","22","bob"]])db.prepare("INSERT INTO users(id,github_user_id,github_username) VALUES(?,?,?)").run(id,githubId,name);
  const s1=createSession(db,"u1",{expiresInMs:7*86400000}),s2=createSession(db,"u2",{expiresInMs:7*86400000});const sid1=(db.prepare("SELECT id FROM sessions WHERE user_id='u1'").get() as {id:string}).id;
  const installation=()=>db.prepare(`INSERT INTO github_installations(id,user_id,installation_id,account_id,account_login,account_type,repository_selection,status) VALUES('record','u1','70','1','octo','User','all','active')`).run();
- const app=createServer({config,database:db,fetchImpl});
+ const app=createServer({config,database:db,fetchImpl,workspaceRoot:root});
  const headers={cookie:`pocketcode_session=${s1.token}`,origin:config.publicBaseUrl,"x-csrf-token":createHmac("sha256",Buffer.from(KEY,"hex")).update(`pocketcode-csrf:${sid1}`).digest("base64url")};
  return {temp,root,db,s1,s2,sid1,headers,installation,app};
 }

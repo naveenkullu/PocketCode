@@ -4,7 +4,7 @@ import path from "node:path";
 import { initializeSchema } from "./schema.js";
 
 export function openDatabase(
-  databasePath = path.resolve(process.cwd(), "data", "pocketcode.sqlite"),
+  databasePath = process.env.DATABASE_PATH?.trim() || path.resolve(process.cwd(), "data", "pocketcode.sqlite"),
 ): Database.Database {
   if (databasePath !== ":memory:") {
     mkdirSync(path.dirname(databasePath), { recursive: true });

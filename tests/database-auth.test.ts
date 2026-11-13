@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -46,6 +46,62 @@ afterEach(() => {
 });
 
 describe("SQLite database", () => {
+  it("uses DATABASE_PATH when configured", () => {
+    const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "pocketcode-database-env-"));
+    const configuredPath = path.join(temporaryDirectory, "configured.sqlite");
+    const previousPath = process.env.DATABASE_PATH;
+    process.env.DATABASE_PATH = configuredPath;
+
+    try {
+      const configuredDatabase = openDatabase();
+      configuredDatabase.close();
+      assert.equal(existsSync(configuredPath), true);
+    } finally {
+      if (previousPath === undefined) delete process.env.DATABASE_PATH;
+      else process.env.DATABASE_PATH = previousPath;
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves the current-working-directory default when DATABASE_PATH is absent", () => {
+    const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "pocketcode-database-default-"));
+    const previousPath = process.env.DATABASE_PATH;
+    const previousWorkingDirectory = process.cwd();
+
+    try {
+      delete process.env.DATABASE_PATH;
+      process.chdir(temporaryDirectory);
+      const defaultPath = path.join(temporaryDirectory, "data", "pocketcode.sqlite");
+      const defaultDatabase = openDatabase();
+      defaultDatabase.close();
+      assert.equal(existsSync(defaultPath), true);
+    } finally {
+      process.chdir(previousWorkingDirectory);
+      if (previousPath === undefined) delete process.env.DATABASE_PATH;
+      else process.env.DATABASE_PATH = previousPath;
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("uses an explicitly passed database path instead of DATABASE_PATH", () => {
+    const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "pocketcode-database-override-"));
+    const configuredPath = path.join(temporaryDirectory, "configured.sqlite");
+    const explicitPath = path.join(temporaryDirectory, "explicit.sqlite");
+    const previousPath = process.env.DATABASE_PATH;
+    process.env.DATABASE_PATH = configuredPath;
+
+    try {
+      const explicitDatabase = openDatabase(explicitPath);
+      explicitDatabase.close();
+      assert.equal(existsSync(explicitPath), true);
+      assert.equal(existsSync(configuredPath), false);
+    } finally {
+      if (previousPath === undefined) delete process.env.DATABASE_PATH;
+      else process.env.DATABASE_PATH = previousPath;
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("initializes the schema with foreign keys and indexes", () => {
     const tables = database
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")

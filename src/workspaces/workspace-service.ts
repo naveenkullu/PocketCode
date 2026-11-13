@@ -89,7 +89,10 @@ export class WorkspaceService {
   private readonly root: string;
   private readonly now: () => number;
   constructor(private readonly database: Database.Database, options: { rootDirectory?: string; now?: () => number } = {}) {
-    this.root = path.resolve(options.rootDirectory ?? path.join(os.tmpdir(), "pocketcode-workspaces"));
+    this.root = path.resolve(
+      options.rootDirectory ??
+        (process.env.WORKSPACE_ROOT?.trim() || path.join(os.tmpdir(), "pocketcode-workspaces")),
+    );
     mkdirSync(this.root, { recursive: true, mode: 0o700 });
     this.now = options.now ?? Date.now;
     this.cleanupExpired();

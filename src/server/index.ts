@@ -120,7 +120,7 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
     throw new Error("Invalid PORT: expected an integer between 1 and 65535.");
   }
 
-  const host = env.HOST?.trim() || "127.0.0.1";
+  const host = env.HOST?.trim() || (env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
   if (/\s/.test(host)) {
     throw new Error("Invalid HOST: expected a hostname or IP address.");
   }
